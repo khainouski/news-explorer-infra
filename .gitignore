@@ -1,0 +1,32 @@
+# Terraform state
+*.tfstate
+*.tfstate.*
+
+# Terraform plans
+*.tfplan
+tfplan
+
+# Local variables
+terraform.tfvars
+*.auto.tfvars
+
+# Terraform working directory
+.terraform/
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Environment files
+.env
+.env.*
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Personal notes, not for commit
+instruction.md

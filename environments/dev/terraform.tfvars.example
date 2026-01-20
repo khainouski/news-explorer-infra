@@ -1,0 +1,4 @@
+region       = "fra1"
+droplet_size = "s-1vcpu-2gb-70gb-intel"
+
+ssh_public_key_path = "~/.ssh/id_ed25519.pub"

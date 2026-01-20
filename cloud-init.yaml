@@ -1,0 +1,27 @@
+#cloud-config
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - jq
+
+write_files:
+  - path: /etc/rancher/k3s/config.yaml
+    permissions: "0600"
+    owner: root:root
+    content: |
+      write-kubeconfig-mode: "0640"
+      disable:
+        - servicelb
+
+runcmd:
+  - curl -sfL https://get.k3s.io | sh -
+  - systemctl enable k3s
+  - systemctl start k3s
+  - k3s kubectl wait --for=condition=Ready node --all --timeout=180s
+  - curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  - echo "news-explorer infrastructure initialized" > /var/log/project-bootstrap.log
