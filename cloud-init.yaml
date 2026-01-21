@@ -15,8 +15,9 @@ write_files:
     owner: root:root
     content: |
       write-kubeconfig-mode: "0640"
-      disable:
-        - servicelb
+      # servicelb (k3s' built-in LoadBalancer implementation) stays enabled — it's what binds
+      # Traefik's Service to the node's 80/443, which Ingress-based routing (news-platform-deploy)
+      # depends on. Disabling it leaves Traefik's Service <pending> and nothing listens on 80/443.
 
 runcmd:
   - curl -sfL https://get.k3s.io | sh -

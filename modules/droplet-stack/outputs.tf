@@ -22,3 +22,8 @@ output "application_url" {
   description = "Temporary application URL without DNS"
   value       = "http://${digitalocean_droplet.app.ipv4_address}"
 }
+
+output "fqdn" {
+  description = "Public hostname backed by the DNS record (null when domain_name is not set)"
+  value       = var.domain_name != "" ? trimsuffix(digitalocean_record.app[0].fqdn, ".") : null
+}
