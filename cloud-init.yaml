@@ -1,4 +1,12 @@
 #cloud-config
+#
+# Keep this file plain ASCII. A single em-dash once broke it: cloud-init failed to parse the
+# whole YAML blob ("unacceptable character #x0080" in cloud-init.log, because DigitalOcean/
+# cloud-init mangled the non-ASCII byte on the way in) and silently skipped both write_files and
+# runcmd - no error surfaced anywhere else, k3s just never got installed. Diagnosed via
+# `cloud-init status` (said "done") + `systemctl status k3s` (said "not found") +
+# `journalctl`/cloud-init.log showing "Skipping modules ... write_files/runcmd because no
+# applicable config is provided". Cheap to avoid, expensive to debug - stick to ASCII here.
 
 package_update: true
 package_upgrade: false
@@ -15,7 +23,7 @@ write_files:
     owner: root:root
     content: |
       write-kubeconfig-mode: "0640"
-      # servicelb (k3s' built-in LoadBalancer implementation) stays enabled — it's what binds
+      # servicelb (k3s' built-in LoadBalancer implementation) stays enabled - it's what binds
       # Traefik's Service to the node's 80/443, which Ingress-based routing (news-platform-deploy)
       # depends on. Disabling it leaves Traefik's Service <pending> and nothing listens on 80/443.
 
@@ -25,4 +33,17 @@ runcmd:
   - systemctl start k3s
   - k3s kubectl wait --for=condition=Ready node --all --timeout=180s
   - curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+  # Argo CD bootstrap - done here on purpose, so "terraform apply" is self-contained and none of
+  # this needs to be run by hand afterwards.
+  - k3s kubectl create namespace argocd
+  # --server-side avoids a "too long" error on the applicationsets.argoproj.io CRD.
+  - k3s kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml --server-side --force-conflicts
+  - k3s kubectl -n argocd wait --for=condition=Available deployment --all --timeout=300s
+  # No TLS yet, so argocd-server must serve plain HTTP behind the Ingress.
+  - k3s kubectl patch configmap argocd-cmd-params-cm -n argocd --type merge -p '{"data":{"server.insecure":"true"}}'
+  - k3s kubectl rollout restart deployment argocd-server -n argocd
+  - k3s kubectl rollout status deployment argocd-server -n argocd --timeout=180s
+  - k3s kubectl apply -f https://raw.githubusercontent.com/khainouski/news-platform-deploy/main/argocd/root-application.yaml
+
   - echo "news-explorer infrastructure initialized" > /var/log/project-bootstrap.log

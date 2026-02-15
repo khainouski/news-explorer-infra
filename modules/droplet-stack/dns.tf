@@ -27,3 +27,15 @@ resource "digitalocean_record" "app" {
   value  = digitalocean_droplet.app.ipv4_address
   ttl    = 3600
 }
+
+# Extra subdomains on the same zone, all pointing at the same droplet (Traefik routes by Host
+# header once they land — see each service's Ingress). e.g. "argocd", "grafana", "kafka".
+resource "digitalocean_record" "additional" {
+  for_each = var.domain_name != "" ? toset(var.additional_dns_records) : toset([])
+
+  domain = var.manage_dns_zone ? digitalocean_domain.app[0].name : data.digitalocean_domain.app[0].name
+  type   = "A"
+  name   = each.value
+  value  = digitalocean_droplet.app.ipv4_address
+  ttl    = 3600
+}

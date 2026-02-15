@@ -21,3 +21,9 @@ variable "domain_name" {
   type        = string
   default     = ""
 }
+
+variable "additional_dns_records" {
+  description = "Extra subdomain labels (e.g. [\"argocd\", \"grafana\"]) that should also point at this droplet, alongside the root record. Ignored when domain_name is empty."
+  type        = list(string)
+  default     = []
+}
