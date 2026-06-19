@@ -25,7 +25,11 @@ resource "digitalocean_record" "app" {
   type   = "A"
   name   = var.dns_record_name
   value  = digitalocean_droplet.app.ipv4_address
-  ttl    = 3600
+  # Low on purpose: a destroy+apply within the old TTL window leaves resolvers (incl. Let's
+  # Encrypt's own, for the HTTP-01 challenge) pointing at the destroyed droplet's dead IP until
+  # it expires - seen firsthand, cert issuance and browser access both failed on the old IP for
+  # up to an hour. 60s keeps that stale window short instead of eliminating a real cost.
+  ttl = 60
 }
 
 # Extra subdomains on the same zone, all pointing at the same droplet (Traefik routes by Host
@@ -37,5 +41,5 @@ resource "digitalocean_record" "additional" {
   type   = "A"
   name   = each.value
   value  = digitalocean_droplet.app.ipv4_address
-  ttl    = 3600
+  ttl    = 60 # see digitalocean_record.app's comment
 }
