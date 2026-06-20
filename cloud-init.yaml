@@ -16,6 +16,7 @@ packages:
   - curl
   - git
   - jq
+  - openssl
 
 write_files:
   - path: /etc/rancher/k3s/config.yaml
@@ -34,6 +35,17 @@ runcmd:
   - k3s kubectl wait --for=condition=Ready node --all --timeout=180s
   - curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 
+  # Grafana's admin password (platform/monitoring/grafana-values.yaml: admin.existingSecret) -
+  # generated here instead of left for a manual `kubectl create secret` afterwards, so
+  # "terraform apply" stays fully self-contained. Written to a 0600 tmpfile and loaded via
+  # --from-file, not --from-literal, so the password itself never lands in cloud-init's own log
+  # (runcmd echoes each command's full argv to /var/log/cloud-init-output.log).
+  - k3s kubectl create namespace monitoring --dry-run=client -o yaml | k3s kubectl apply -f -
+  - install -m 600 /dev/null /root/.grafana-admin-password
+  - openssl rand -base64 18 > /root/.grafana-admin-password
+  - k3s kubectl create secret generic grafana-admin-credentials -n monitoring --from-literal=admin-user=admin --from-file=admin-password=/root/.grafana-admin-password --dry-run=client -o yaml | k3s kubectl apply -f -
+  - shred -u /root/.grafana-admin-password
+
   # Argo CD bootstrap - done here on purpose, so "terraform apply" is self-contained and none of
   # this needs to be run by hand afterwards.
   - k3s kubectl create namespace argocd
@@ -45,5 +57,23 @@ runcmd:
   - k3s kubectl rollout restart deployment argocd-server -n argocd
   - k3s kubectl rollout status deployment argocd-server -n argocd --timeout=180s
   - k3s kubectl apply -f https://raw.githubusercontent.com/khainouski/news-platform-deploy/main/argocd/root-application.yaml
+
+  # news-explorer's DB password (apps/news-explorer/values.yaml: postgres.existingSecret) has to
+  # be a copy of whatever the postgresql chart generated for itself (auth.password left unset in
+  # platform/postgresql/postgresql-values.yaml) - not a fresh random value, or the app's login
+  # would never match the actual DB. That Secret only exists once Argo CD has pulled and installed
+  # the postgresql chart, which happens asynchronously after root-application above, so this waits
+  # (up to 5 minutes) instead of assuming it is already there. Same 0600-tmpfile-then-shred
+  # handling as the Grafana password above, and skipped entirely (no secret written) if the wait
+  # times out - the app falls back to the manual `kubectl create secret` step from the README
+  # rather than silently creating one with an empty password.
+  - |
+    k3s kubectl create namespace apps --dry-run=client -o yaml | k3s kubectl apply -f -
+    if timeout 300 bash -c 'until k3s kubectl get secret postgresql -n database >/dev/null 2>&1; do sleep 5; done'; then
+      install -m 600 /dev/null /root/.news-explorer-db-password
+      k3s kubectl get secret postgresql -n database -o jsonpath='{.data.password}' | base64 -d > /root/.news-explorer-db-password
+      k3s kubectl create secret generic news-explorer-postgres-credentials -n apps --from-file=password=/root/.news-explorer-db-password --dry-run=client -o yaml | k3s kubectl apply -f -
+      shred -u /root/.news-explorer-db-password
+    fi
 
   - echo "news-explorer infrastructure initialized" > /var/log/project-bootstrap.log
