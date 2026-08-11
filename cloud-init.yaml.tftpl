@@ -1,0 +1,49 @@
+#cloud-config
+#
+# Keep this file plain ASCII. A single em-dash once broke it: cloud-init failed to parse the
+# whole YAML blob ("unacceptable character #x0080" in cloud-init.log, because DigitalOcean/
+# cloud-init mangled the non-ASCII byte on the way in) and silently skipped both write_files and
+# runcmd - no error surfaced anywhere else, k3s just never got installed. Diagnosed via
+# `cloud-init status` (said "done") + `systemctl status k3s` (said "not found") +
+# `journalctl`/cloud-init.log showing "Skipping modules ... write_files/runcmd because no
+# applicable config is provided". Cheap to avoid, expensive to debug - stick to ASCII here.
+#
+# This is a Terraform template (see modules/droplet-stack/server.tf) - install-k3s.sh and
+# bootstrap-platform.sh are real shell scripts under scripts/, embedded here at apply time so
+# user_data stays self-contained (no extra network fetch of our own scripts at boot).
+
+package_update: true
+package_upgrade: false
+
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - jq
+  - openssl
+
+write_files:
+  - path: /etc/rancher/k3s/config.yaml
+    permissions: "0600"
+    owner: root:root
+    content: |
+      write-kubeconfig-mode: "0640"
+      # servicelb (k3s' built-in LoadBalancer implementation) stays enabled - it's what binds
+      # Traefik's Service to the node's 80/443, which Ingress-based routing (news-platform-deploy)
+      # depends on. Disabling it leaves Traefik's Service <pending> and nothing listens on 80/443.
+
+  - path: /opt/install-k3s.sh
+    permissions: "0700"
+    owner: root:root
+    content: |
+      ${indent(6, install_k3s_script)}
+
+  - path: /opt/bootstrap-platform.sh
+    permissions: "0700"
+    owner: root:root
+    content: |
+      ${indent(6, bootstrap_platform_script)}
+
+runcmd:
+  - /opt/install-k3s.sh
+  - /opt/bootstrap-platform.sh

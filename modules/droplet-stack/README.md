@@ -35,8 +35,9 @@ module "droplet_stack" {
 
 ## Creates
 
-`digitalocean_ssh_key`, `digitalocean_droplet` (monitoring on, bootstrapped via `cloud-init.yaml`
-at the repo root), `digitalocean_firewall` (22/80/443 open to all — key-only SSH auth is the real
+`digitalocean_ssh_key`, `digitalocean_droplet` (monitoring on, bootstrapped via
+`cloud-init.yaml.tftpl` + `scripts/*.sh` at the repo root — see the root README/CLAUDE.md),
+`digitalocean_firewall` (22/80/443 open to all — key-only SSH auth is the real
 control, root has no password). `digitalocean_domain` + `digitalocean_record` only when
 `domain_name` is set — most environments (e.g. `dev`) leave it unset and skip DNS entirely.
 
